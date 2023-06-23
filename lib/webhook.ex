@@ -58,19 +58,19 @@ defmodule Telegram.Webhook do
   - `max_connections`: maximum allowed number of simultaneous connections to the webhook for update delivery (optional, defaults #{@default_max_connections})
   """
   @type config :: [
-          host: String.t(),
-          port: :inet.port_number(),
-          local_port: :inet.port_number(),
-          max_connections: 1..100,
-          set_webhook: boolean()
-        ]
+                    host: String.t(),
+                    port: :inet.port_number(),
+                    local_port: :inet.port_number(),
+                    max_connections: 1..100,
+                    set_webhook: boolean()
+                  ]
 
   @spec start_link(config: config(), bots: [Types.bot_spec()]) :: Supervisor.on_start()
   def start_link(config: config, bots: bot_specs) do
     Supervisor.start_link(__MODULE__, {config, bot_specs}, name: __MODULE__)
   end
 
-  @impl Supervisor
+  @impl true
   def init({config, bot_specs}) do
     config = Keyword.merge(@default_config, config)
     host = Keyword.fetch!(config, :host)
@@ -98,7 +98,7 @@ defmodule Telegram.Webhook do
       end
     end)
 
-    Supervisor.init(bot_specs, strategy: :one_for_one)
+    Supervisor.init([], strategy: :one_for_one)
   end
 
   # coveralls-ignore-start
