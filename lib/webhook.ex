@@ -97,6 +97,8 @@ defmodule Telegram.Webhook do
         Logger.info("Skipped setWebhook as requested via config.set_webhook", bot: bot_behaviour_mod, token: token)
       end
     end)
+
+    Supervisor.init(bot_specs, strategy: :one_for_one)
   end
 
   # coveralls-ignore-start
