@@ -75,20 +75,17 @@ defmodule Telegram.Webhook do
     config = Keyword.merge(@default_config, config)
     host = Keyword.fetch!(config, :host)
     port = Keyword.fetch!(config, :port)
-    local_port = Keyword.fetch!(config, :local_port)
     max_connections = Keyword.fetch!(config, :max_connections)
     set_webhook? = Keyword.fetch!(config, :set_webhook)
 
-    bot_routing_map =
-      bot_specs
-      |> Map.new(fn {bot_behaviour_mod, opts} ->
-        token = Keyword.fetch!(opts, :token)
-        {token, bot_behaviour_mod}
-      end)
-
     Enum.each(bot_specs, fn {bot_behaviour_mod, opts} ->
       token = Keyword.fetch!(opts, :token)
-      url = %URI{scheme: "https", host: host, path: "/#{token}", port: port} |> to_string()
+
+      path =
+        Keyword.fetch!(opts, :path)
+        |> Path.join(token)
+
+      url = %URI{scheme: "https", host: host, path: path, port: port} |> to_string()
 
       Logger.info("Running in webhook mode #{url}", bot: bot_behaviour_mod, token: token)
 
@@ -100,20 +97,6 @@ defmodule Telegram.Webhook do
         Logger.info("Skipped setWebhook as requested via config.set_webhook", bot: bot_behaviour_mod, token: token)
       end
     end)
-
-    plug_cowboy_spec =
-      {Plug.Cowboy,
-       [
-         scheme: :http,
-         plug: {Telegram.Webhook.Router, [bot_routing_map: bot_routing_map]},
-         options: [
-           port: local_port
-         ]
-       ]}
-
-    children = bot_specs ++ [plug_cowboy_spec]
-
-    Supervisor.init(children, strategy: :one_for_one)
   end
 
   # coveralls-ignore-start
@@ -121,40 +104,6 @@ defmodule Telegram.Webhook do
   defp set_webhook(token, url, max_connections) do
     opts = [url: url, max_connections: max_connections]
     {:ok, _} = retry(fn -> Telegram.Api.request(token, "setWebhook", opts) end)
-  end
-
-  # coveralls-ignore-stop
-end
-
-defmodule Telegram.Webhook.Router do
-  @moduledoc false
-
-  require Logger
-
-  use Plug.Router
-
-  plug :match
-  plug Plug.Parsers, parsers: [:json], pass: ["*/*"], json_decoder: Jason
-  plug :dispatch, builder_opts()
-
-  post "/:token" do
-    update = conn.body_params
-    bot_dispatch_behaviour = Map.get(opts[:bot_routing_map], token)
-
-    Logger.debug("received update: #{inspect(update)}", bot: bot_dispatch_behaviour)
-
-    if bot_dispatch_behaviour == nil do
-      Plug.Conn.send_resp(conn, :not_found, "")
-    else
-      bot_dispatch_behaviour.dispatch_update(update, token)
-      Plug.Conn.send_resp(conn, :ok, "")
-    end
-  end
-
-  # coveralls-ignore-start
-
-  match _ do
-    Plug.Conn.send_resp(conn, :not_found, "")
   end
 
   # coveralls-ignore-stop
